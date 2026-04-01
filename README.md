@@ -27,7 +27,7 @@ pi install git:https://github.com/baggiiiie/pi-stuff
 - Node.js 20+
 - [pi](https://github.com/nichochar/pi) installed globally
 - [Glimpse](https://github.com/hazat/glimpse) available either as an installed package Node can resolve or as a global install
-- Internet access (Chart.js and Google Fonts CDNs)
+- Internet access (for the Chart.js CDN)
 
 If the extension cannot find Glimpse automatically, set `GLIMPSE_PATH` to the absolute path to `glimpseui/src/glimpse.mjs`.
 

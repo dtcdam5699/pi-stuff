@@ -1,6 +1,8 @@
 import type { ChartPayload } from "./data.ts";
 
 const WINDOW_TITLE = "Session Context Usage";
+const SANS_FONT = 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+const MONO_FONT = 'ui-monospace, "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", monospace';
 
 export function renderHtml(initialPayload: ChartPayload): string {
     return `<!doctype html>
@@ -10,9 +12,6 @@ export function renderHtml(initialPayload: ChartPayload): string {
 	<meta name="viewport" content="width=device-width, initial-scale=1" />
 	<title>${WINDOW_TITLE}</title>
 	<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
-	<link rel="preconnect" href="https://fonts.googleapis.com">
-	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-	<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
 	<style>
 		:root {
 			color-scheme: light dark;
@@ -37,7 +36,7 @@ export function renderHtml(initialPayload: ChartPayload): string {
 		body {
 			margin: 0;
 			padding: 20px 24px;
-			font-family: 'IBM Plex Sans', -apple-system, sans-serif;
+			font-family: ${SANS_FONT};
 			background: var(--bg);
 			color: var(--text);
 		}
@@ -57,7 +56,7 @@ export function renderHtml(initialPayload: ChartPayload): string {
 			display: inline-flex;
 			align-items: center;
 			gap: 6px;
-			font-family: 'IBM Plex Mono', monospace;
+			font-family: ${MONO_FONT};
 			font-size: 11px;
 			font-weight: 500;
 			color: var(--muted);
@@ -71,7 +70,7 @@ export function renderHtml(initialPayload: ChartPayload): string {
 		}
 		.title h1 {
 			margin: 6px 0 4px;
-			font-family: 'IBM Plex Sans', sans-serif;
+			font-family: ${SANS_FONT};
 			font-size: 20px;
 			font-weight: 600;
 			line-height: 1.2;
@@ -95,7 +94,7 @@ export function renderHtml(initialPayload: ChartPayload): string {
 		}
 		.card .label {
 			display: block;
-			font-family: 'IBM Plex Mono', monospace;
+			font-family: ${MONO_FONT};
 			font-size: 10px;
 			font-weight: 500;
 			text-transform: uppercase;
@@ -104,14 +103,14 @@ export function renderHtml(initialPayload: ChartPayload): string {
 			margin-bottom: 6px;
 		}
 		.card .value {
-			font-family: 'IBM Plex Mono', monospace;
+			font-family: ${MONO_FONT};
 			font-size: 20px;
 			font-weight: 600;
 			letter-spacing: -0.02em;
 		}
 		.card .subvalue {
 			margin-top: 4px;
-			font-family: 'IBM Plex Mono', monospace;
+			font-family: ${MONO_FONT};
 			font-size: 11px;
 			color: var(--muted);
 		}
@@ -137,14 +136,14 @@ export function renderHtml(initialPayload: ChartPayload): string {
 			padding: 24px;
 			color: var(--muted);
 			font-size: 13px;
-			font-family: 'IBM Plex Mono', monospace;
+			font-family: ${MONO_FONT};
 		}
 		.footer {
 			display: flex;
 			justify-content: space-between;
 			gap: 16px;
 			color: var(--muted);
-			font-family: 'IBM Plex Mono', monospace;
+			font-family: ${MONO_FONT};
 			font-size: 11px;
 		}
 		.footer span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -263,7 +262,7 @@ export function renderHtml(initialPayload: ChartPayload): string {
 								usePointStyle: true,
 								pointStyle: 'rect',
 								color: mutedColor,
-								font: { family: "'IBM Plex Mono', monospace", size: 11 },
+								font: { family: ${JSON.stringify(MONO_FONT)}, size: 11 },
 								padding: 16,
 							},
 						},
@@ -274,9 +273,9 @@ export function renderHtml(initialPayload: ChartPayload): string {
 							footerColor: getComputedStyle(document.documentElement).getPropertyValue('--text').trim(),
 							borderColor: borderColor,
 							borderWidth: 1,
-							titleFont: { family: "'IBM Plex Mono', monospace", size: 12, weight: '600' },
-							bodyFont: { family: "'IBM Plex Mono', monospace", size: 11 },
-							footerFont: { family: "'IBM Plex Mono', monospace", size: 11, weight: '600' },
+							titleFont: { family: ${JSON.stringify(MONO_FONT)}, size: 12, weight: '600' },
+							bodyFont: { family: ${JSON.stringify(MONO_FONT)}, size: 11 },
+							footerFont: { family: ${JSON.stringify(MONO_FONT)}, size: 11, weight: '600' },
 							padding: 10,
 							titleMarginBottom: 6,
 							cornerRadius: 0,
@@ -308,19 +307,19 @@ export function renderHtml(initialPayload: ChartPayload): string {
 					scales: {
 						x: {
 							stacked: true,
-							title: { display: true, text: 'Turn', color: mutedColor, font: { family: "'IBM Plex Mono', monospace", size: 11 } },
+							title: { display: true, text: 'Turn', color: mutedColor, font: { family: ${JSON.stringify(MONO_FONT)}, size: 11 } },
 							grid: { color: borderColor, lineWidth: 0.5 },
-							ticks: { color: mutedColor, font: { family: "'IBM Plex Mono', monospace", size: 11 } },
+							ticks: { color: mutedColor, font: { family: ${JSON.stringify(MONO_FONT)}, size: 11 } },
 							border: { color: borderColor },
 						},
 						y: {
 							stacked: true,
 							beginAtZero: true,
-							title: { display: true, text: 'Tokens', color: mutedColor, font: { family: "'IBM Plex Mono', monospace", size: 11 } },
+							title: { display: true, text: 'Tokens', color: mutedColor, font: { family: ${JSON.stringify(MONO_FONT)}, size: 11 } },
 							grid: { color: borderColor, lineWidth: 0.5 },
 							ticks: {
 								color: mutedColor,
-								font: { family: "'IBM Plex Mono', monospace", size: 11 },
+								font: { family: ${JSON.stringify(MONO_FONT)}, size: 11 },
 								callback(value) { return formatTokens(Number(value)); },
 							},
 							border: { color: borderColor },

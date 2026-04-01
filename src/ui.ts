@@ -3,7 +3,7 @@ import type { ChartPayload } from "./data.ts";
 const WINDOW_TITLE = "Session Context Usage";
 
 export function renderHtml(initialPayload: ChartPayload): string {
-	return `<!doctype html>
+    return `<!doctype html>
 <html>
 <head>
 	<meta charset="utf-8" />
@@ -158,7 +158,6 @@ export function renderHtml(initialPayload: ChartPayload): string {
 	<div class="shell">
 		<div class="header">
 			<div class="title">
-				<div class="badge"><span class="live-dot"></span>Live session context</div>
 				<h1>Context usage by turn</h1>
 				<p id="subtitle">Estimating prompt composition for each model request in the current branch.</p>
 			</div>

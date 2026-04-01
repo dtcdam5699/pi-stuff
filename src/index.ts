@@ -1,7 +1,7 @@
 import { pathToFileURL } from "node:url";
 import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
-import { buildRecordedSnapshots, buildLiveSnapshot, buildPayload, type Snapshot, type ChartPayload } from "./context-chart/data.ts";
-import { renderHtml } from "./context-chart/ui.ts";
+import { buildRecordedSnapshots, buildLiveSnapshot, buildPayload, type Snapshot, type ChartPayload } from "./data.ts";
+import { renderHtml } from "./ui.ts";
 
 const GLIMPSE_PATH = "/Users/ydai/.npm-global/lib/node_modules/glimpseui/src/glimpse.mjs";
 const WINDOW_TITLE = "Session Context Usage";

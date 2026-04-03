@@ -1,8 +1,10 @@
 # pi-context-chart
 
-A [pi](https://github.com/nichochar/pi) extension that opens a live context usage chart in a native [glimpse](https://github.com/hazat/glimpse) window, showing how your token budget is consumed turn by turn.
+A [pi](https://github.com/badlogic/pi-mono) extension that opens a live context usage chart in a native [glimpse](https://github.com/hazat/glimpse) window, showing how your token budget is consumed turn by turn.
 
 ![type:extension](https://img.shields.io/badge/type-pi%20extension-blue)
+
+![pi-context-chart screenshot](docs/pi-context-chart.png)
 
 ## What it does
 
@@ -25,7 +27,7 @@ pi install git:https://github.com/baggiiiie/pi-stuff
 ## Requirements
 
 - Node.js 20+
-- [pi](https://github.com/nichochar/pi) installed globally
+- [pi](https://github.com/badlogic/pi-mono) installed globally
 - [Glimpse](https://github.com/hazat/glimpse) available either as an installed package Node can resolve or as a global install
 - Internet access (for the Chart.js CDN)
 

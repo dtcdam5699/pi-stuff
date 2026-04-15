@@ -362,7 +362,7 @@ function buildStatusText(snapshot: UsageSnapshot): string {
     const reset = snapshot.primary.resetAfterSeconds
         ? ` | resets in ${formatRelativeSeconds(snapshot.primary.resetAfterSeconds)}`
         : "";
-    return `Codex Weekly Limit: ${Math.round(100 - snapshot.primary.usedPercent)}% left${reset}`;
+    return `Codex Session Limit: ${Math.round(100 - snapshot.primary.usedPercent)}% left${reset}`;
 }
 
 function formatWindow(window: RateWindow): string {

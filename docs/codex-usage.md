@@ -3,7 +3,7 @@
 This repo includes a project-local pi extension at:
 
 - `.pi/extensions/codex-usage.ts`
-- implementation: `src/codex-usage.ts`
+- implementation: `packages/codex-usage/src/index.ts`
 
 ## Command
 

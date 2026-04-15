@@ -1,13 +1,9 @@
 {
-    "name": "pi-context-chart",
+    "name": "pi-stuff",
+    "private": true,
     "version": "0.0.1",
     "type": "module",
-    "pi": {
-        "extensions": [
-            "./src/index.ts"
-        ]
-    },
-    "peerDependencies": {
-        "@mariozechner/pi-coding-agent": "*"
-    }
+    "workspaces": [
+        "packages/*"
+    ]
 }

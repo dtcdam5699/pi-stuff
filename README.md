@@ -1,43 +1,40 @@
-# pi-context-chart
+# pi-stuff
 
-A [pi](https://github.com/badlogic/pi-mono) extension that opens a live context usage chart in a native [glimpse](https://github.com/hazat/glimpse) window, showing how your token budget is consumed turn by turn.
+Small monorepo for two standalone pi extension packages:
 
-![type:extension](https://img.shields.io/badge/type-pi%20extension-blue)
+- `packages/context-chart` → `pi-context-chart`
+- `packages/codex-usage` → `pi-codex-usage`
 
-![pi-context-chart screenshot](docs/pi-context-chart.png)
+## Install locally
 
-## What it does
+Install either package directly from this repo:
 
-Adds a `/context-chart` command to pi that opens an interactive stacked area chart visualizing prompt composition across turns:
-
-- **System instructions**: system prompt tokens
-- **User input**: your messages
-- **Agent output**: assistant responses
-- **Tools**: tool calls and results
-- **Memory**: compaction summaries, branch summaries, custom entries
-
-The chart updates in real time as you interact with pi, tracking context events, turn completions, session switches, forks, and compactions. Stats cards show current context usage, context window percentage, cumulative token usage, cache hits, and estimated cost.
-
-## Install
-
-```
-pi install git:https://github.com/baggiiiie/pi-stuff
+```bash
+pi install ./packages/context-chart
+pi install ./packages/codex-usage
 ```
 
-## Requirements
+## Publish separately
 
-- Node.js 20+
-- [pi](https://github.com/badlogic/pi-mono) installed globally
-- [Glimpse](https://github.com/hazat/glimpse) available either as an installed package Node can resolve or as a global install
-- Internet access (for the Chart.js CDN)
+From each package directory:
 
-If the extension cannot find Glimpse automatically, set `GLIMPSE_PATH` to the absolute path to `glimpseui/src/glimpse.mjs`.
-
-## Usage
-
-```
-/context-chart          # open the chart window
-/context-chart close    # close it
+```bash
+cd packages/context-chart && npm publish
+cd packages/codex-usage && npm publish
 ```
 
-The window stays open and updates live across session switches, forks, compactions, and model changes. It closes automatically when the session shuts down.
+Then users can install them independently:
+
+```bash
+pi install npm:pi-context-chart
+pi install npm:pi-codex-usage
+```
+
+## Local development in this repo
+
+Project-local pi loaders live here:
+
+- `.pi/extensions/context-chart.ts`
+- `.pi/extensions/codex-usage.ts`
+
+They point at the package sources so `/reload` keeps working while developing in this repo.

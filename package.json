@@ -6,6 +6,19 @@
     "workspaces": [
         "packages/*"
     ],
+    "keywords": [
+        "pi-package"
+    ],
+    "pi": {
+        "extensions": [
+            "packages"
+        ]
+    },
+    "peerDependencies": {
+        "@mariozechner/pi-ai": "*",
+        "@mariozechner/pi-coding-agent": "*",
+        "@mariozechner/pi-tui": "*"
+    },
     "scripts": {
         "publish:all": "./scripts/publish-all.sh"
     }

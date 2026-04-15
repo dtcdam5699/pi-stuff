@@ -1,4 +1,4 @@
-# pi-codex-usage
+# @baggiiiie/pi-codex-usage
 
 A pi package that adds the `/codex-usage` command and status widget.
 
@@ -11,7 +11,7 @@ pi install /path/to/pi-stuff/packages/codex-usage
 Or after publishing:
 
 ```bash
-pi install npm:pi-codex-usage
+pi install npm:@baggiiiie/pi-codex-usage
 ```
 
 ## Usage

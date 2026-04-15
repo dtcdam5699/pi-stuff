@@ -2,8 +2,8 @@
 
 Small monorepo for two standalone pi extension packages:
 
-- `packages/context-chart` → `pi-context-chart`
-- `packages/codex-usage` → `pi-codex-usage`
+- `packages/context-chart` → `@baggiiiie/pi-context-chart`
+- `packages/codex-usage` → `@baggiiiie/pi-codex-usage`
 
 ## Install locally
 
@@ -26,8 +26,8 @@ cd packages/codex-usage && npm publish
 Then users can install them independently:
 
 ```bash
-pi install npm:pi-context-chart
-pi install npm:pi-codex-usage
+pi install npm:@baggiiiie/pi-context-chart
+pi install npm:@baggiiiie/pi-codex-usage
 ```
 
 ## Local development in this repo

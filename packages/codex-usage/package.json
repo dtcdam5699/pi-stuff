@@ -1,5 +1,5 @@
 {
-  "name": "pi-codex-usage",
+  "name": "@baggiiiie/pi-codex-usage",
   "version": "0.0.1",
   "type": "module",
   "files": ["src", "README.md", "LICENSE"],

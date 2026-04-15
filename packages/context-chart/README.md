@@ -1,4 +1,4 @@
-# pi-context-chart
+# @baggiiiie/pi-context-chart
 
 A pi package that adds the `/context-chart` command.
 
@@ -11,7 +11,7 @@ pi install /path/to/pi-stuff/packages/context-chart
 Or after publishing:
 
 ```bash
-pi install npm:pi-context-chart
+pi install npm:@baggiiiie/pi-context-chart
 ```
 
 ## Usage

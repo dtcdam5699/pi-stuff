@@ -1,5 +1,5 @@
 {
-  "name": "pi-context-chart",
+  "name": "@baggiiiie/pi-context-chart",
   "version": "0.0.1",
   "type": "module",
   "files": ["src", "README.md", "LICENSE"],

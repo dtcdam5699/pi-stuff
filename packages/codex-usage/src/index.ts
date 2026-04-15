@@ -1,4 +1,7 @@
+import { createHash } from "node:crypto";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
+import path from "node:path";
 import { CustomEditor, type ExtensionAPI, type ExtensionCommandContext } from "@mariozechner/pi-coding-agent";
 import { matchesKey } from "@mariozechner/pi-tui";
 
@@ -6,14 +9,18 @@ const KEY = "codex-usage";
 const DEFAULT_PROVIDER = "openai-codex";
 const DEFAULT_TIMEOUT_MS = 15_000;
 const DEFAULT_REFRESH_INTERVAL_MS = 5 * 60_000;
+const DEFAULT_CACHE_TTL_MS = 5 * 60_000;
 const DEFAULT_URL = "https://chatgpt.com/backend-api/wham/usage";
 const JWT_CLAIM_PATH = "https://api.openai.com/auth";
+const LOCK_STALE_AFTER_MS = 30_000;
+const LOCK_WAIT_POLL_MS = 250;
 
 type Config = {
     provider: string;
     url: string;
     timeoutMs: number;
     refreshIntervalMs: number;
+    cacheTtlMs: number;
 };
 
 type RateWindow = {
@@ -38,6 +45,16 @@ type UsageSnapshot = {
         balance?: string;
     };
     updatedAt: Date;
+};
+
+type SerializedUsageSnapshot = Omit<UsageSnapshot, "updatedAt"> & {
+    updatedAt: string;
+};
+
+type SharedCachePaths = {
+    dir: string;
+    cachePath: string;
+    lockPath: string;
 };
 
 type WhamWindowRaw = {
@@ -130,22 +147,26 @@ export default function (pi: ExtensionAPI) {
         ctx.ui.setStatus(KEY, "Codex usage unavailable");
     };
 
-    const getUsageSnapshot = async (ctx: RuntimeContext) => {
+    const getUsageSnapshot = async (ctx: RuntimeContext, options?: { force?: boolean }) => {
         if (!refreshInFlight) {
-            refreshInFlight = fetchUsage(config, ctx).finally(() => {
-                refreshInFlight = undefined;
+            const request = loadUsageSnapshot(config, ctx, options);
+            const inFlight = request.finally(() => {
+                if (refreshInFlight === inFlight) {
+                    refreshInFlight = undefined;
+                }
             });
+            refreshInFlight = inFlight;
         }
         return await refreshInFlight;
     };
 
-    const refreshUsage = async (ctx: RuntimeContext, options?: { showWidget?: boolean; showLoading?: boolean }) => {
+    const refreshUsage = async (ctx: RuntimeContext, options?: { showWidget?: boolean; showLoading?: boolean; force?: boolean }) => {
         if (options?.showLoading) {
             ctx.ui.setStatus(KEY, "Codex usage loading...");
         }
 
         try {
-            const snapshot = await getUsageSnapshot(ctx);
+            const snapshot = await getUsageSnapshot(ctx, { force: options?.force });
             if (options?.showWidget || isUsageActive) {
                 renderUsage(snapshot, ctx);
                 if (options?.showWidget) {
@@ -189,6 +210,7 @@ export default function (pi: ExtensionAPI) {
             await refreshUsage(ctx, {
                 showWidget: true,
                 showLoading: true,
+                force: command === "refresh",
             });
         },
     });
@@ -212,9 +234,10 @@ function showHelp(config: Config, ctx: Pick<ExtensionCommandContext, "ui">) {
         "/codex-usage",
         "",
         "Commands:",
-        "  /codex-usage         Fetch and show usage",
-        "  /codex-usage clear   Clear widget + status",
-        "  /codex-usage help    Show setup help",
+        "  /codex-usage          Show usage (uses shared cache when fresh)",
+        "  /codex-usage refresh  Force a fresh fetch now",
+        "  /codex-usage clear    Clear widget + status",
+        "  /codex-usage help     Show setup help",
         "",
         "Default endpoint:",
         `  ${DEFAULT_URL}`,
@@ -224,12 +247,163 @@ function showHelp(config: Config, ctx: Pick<ExtensionCommandContext, "ui">) {
         `  CODEX_USAGE_PROVIDER=${config.provider}`,
         `  CODEX_USAGE_TIMEOUT_MS=${config.timeoutMs}`,
         `  CODEX_USAGE_REFRESH_INTERVAL_MS=${config.refreshIntervalMs}`,
+        `  CODEX_USAGE_CACHE_TTL_MS=${config.cacheTtlMs}`,
         "",
+        "Multiple pi sessions share a temp-file cache per provider/url.",
         "Set CODEX_USAGE_REFRESH_INTERVAL_MS=0 to disable background refresh.",
+        "Set CODEX_USAGE_CACHE_TTL_MS=0 to disable shared cache reuse.",
         "Endpoint must return ChatGPT WHAM-style usage JSON.",
         "",
         "The built-in default adds chatgpt-account-id, originator=pi, and a pi-style User-Agent.",
     ]);
+}
+
+async function loadUsageSnapshot(config: Config, ctx: RuntimeContext, options?: { force?: boolean }): Promise<UsageSnapshot> {
+    const requestedAt = Date.now();
+    const cachedSnapshot = options?.force ? undefined : await readSharedUsageSnapshot(config);
+    if (cachedSnapshot && isFreshSnapshot(config, cachedSnapshot)) {
+        return cachedSnapshot;
+    }
+
+    const lock = await acquireUsageLock(config);
+    if (lock) {
+        try {
+            const latestSnapshot = options?.force ? undefined : await readSharedUsageSnapshot(config);
+            if (latestSnapshot && isFreshSnapshot(config, latestSnapshot)) {
+                return latestSnapshot;
+            }
+
+            const snapshot = await fetchUsage(config, ctx);
+            await writeSharedUsageSnapshot(config, snapshot);
+            return snapshot;
+        } finally {
+            await lock.release();
+        }
+    }
+
+    const waitedSnapshot = await waitForSharedUsageSnapshot(config, {
+        waitMs: config.timeoutMs + 2_000,
+        minUpdatedAtMs: options?.force ? requestedAt : undefined,
+    });
+    if (waitedSnapshot && (options?.force ? waitedSnapshot.updatedAt.getTime() >= requestedAt : isFreshSnapshot(config, waitedSnapshot))) {
+        return waitedSnapshot;
+    }
+
+    const snapshot = await fetchUsage(config, ctx);
+    await writeSharedUsageSnapshot(config, snapshot).catch(() => undefined);
+    return snapshot;
+}
+
+async function readSharedUsageSnapshot(config: Config): Promise<UsageSnapshot | undefined> {
+    const { cachePath } = getSharedCachePaths(config);
+    try {
+        const raw = JSON.parse(await readFile(cachePath, "utf8")) as { snapshot?: SerializedUsageSnapshot };
+        return deserializeUsageSnapshot(raw.snapshot);
+    } catch {
+        return undefined;
+    }
+}
+
+async function writeSharedUsageSnapshot(config: Config, snapshot: UsageSnapshot): Promise<void> {
+    const { dir, cachePath } = getSharedCachePaths(config);
+    await mkdir(dir, { recursive: true });
+    await writeFile(cachePath, JSON.stringify({ snapshot: serializeUsageSnapshot(snapshot) }), "utf8");
+}
+
+async function waitForSharedUsageSnapshot(
+    config: Config,
+    options: { waitMs: number; minUpdatedAtMs?: number },
+): Promise<UsageSnapshot | undefined> {
+    const deadline = Date.now() + options.waitMs;
+    while (Date.now() < deadline) {
+        const snapshot = await readSharedUsageSnapshot(config);
+        if (snapshot) {
+            const matchesMinTime = options.minUpdatedAtMs === undefined || snapshot.updatedAt.getTime() >= options.minUpdatedAtMs;
+            if (matchesMinTime && isFreshSnapshot(config, snapshot)) {
+                return snapshot;
+            }
+        }
+        await sleep(LOCK_WAIT_POLL_MS);
+    }
+    return undefined;
+}
+
+function isFreshSnapshot(config: Config, snapshot: UsageSnapshot): boolean {
+    return config.cacheTtlMs > 0 && Date.now() - snapshot.updatedAt.getTime() <= config.cacheTtlMs;
+}
+
+async function acquireUsageLock(config: Config): Promise<{ release: () => Promise<void> } | undefined> {
+    const paths = getSharedCachePaths(config);
+    await mkdir(paths.dir, { recursive: true });
+
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+        try {
+            await writeFile(paths.lockPath, String(Date.now()), { encoding: "utf8", flag: "wx" });
+            return {
+                release: async () => {
+                    await rm(paths.lockPath, { force: true });
+                },
+            };
+        } catch (error) {
+            if (!isAlreadyExistsError(error)) {
+                return undefined;
+            }
+
+            if (!(await clearStaleUsageLock(paths.lockPath, config.timeoutMs))) {
+                return undefined;
+            }
+        }
+    }
+
+    return undefined;
+}
+
+async function clearStaleUsageLock(lockPath: string, timeoutMs: number): Promise<boolean> {
+    try {
+        const lockText = await readFile(lockPath, "utf8");
+        const createdAt = Number.parseInt(lockText.trim(), 10);
+        const staleAfterMs = Math.max(timeoutMs * 2, LOCK_STALE_AFTER_MS);
+        if (!Number.isFinite(createdAt) || Date.now() - createdAt > staleAfterMs) {
+            await rm(lockPath, { force: true });
+            return true;
+        }
+    } catch {
+        await rm(lockPath, { force: true }).catch(() => undefined);
+        return true;
+    }
+
+    return false;
+}
+
+function isAlreadyExistsError(error: unknown): boolean {
+    return error instanceof Error && "code" in error && error.code === "EEXIST";
+}
+
+function getSharedCachePaths(config: Config): SharedCachePaths {
+    const key = createHash("sha1").update(`${config.provider}\0${config.url}`).digest("hex");
+    const dir = path.join(os.tmpdir(), "pi-codex-usage");
+    return {
+        dir,
+        cachePath: path.join(dir, `${key}.json`),
+        lockPath: path.join(dir, `${key}.lock`),
+    };
+}
+
+function serializeUsageSnapshot(snapshot: UsageSnapshot): SerializedUsageSnapshot {
+    return {
+        ...snapshot,
+        updatedAt: snapshot.updatedAt.toISOString(),
+    };
+}
+
+function deserializeUsageSnapshot(raw: SerializedUsageSnapshot | undefined): UsageSnapshot | undefined {
+    if (!raw || typeof raw !== "object") return undefined;
+    const updatedAt = new Date(raw.updatedAt);
+    if (Number.isNaN(updatedAt.getTime())) return undefined;
+    return {
+        ...raw,
+        updatedAt,
+    };
 }
 
 async function fetchUsage(config: Config, ctx: RuntimeContext): Promise<UsageSnapshot> {
@@ -298,8 +472,8 @@ function looksLikeWhamUsage(raw: unknown): raw is WhamRaw {
     const obj = raw as WhamRaw;
     return Boolean(
         obj.plan_type ||
-        toFiniteNumber(obj.rate_limit?.primary_window?.used_percent) !== undefined ||
-        toFiniteNumber(obj.rate_limit?.secondary_window?.used_percent) !== undefined,
+            toFiniteNumber(obj.rate_limit?.primary_window?.used_percent) !== undefined ||
+            toFiniteNumber(obj.rate_limit?.secondary_window?.used_percent) !== undefined,
     );
 }
 
@@ -401,11 +575,13 @@ function formatWindow(window: RateWindow): string {
 }
 
 function readConfig(): Config {
+    const refreshIntervalMs = parseRefreshInterval(process.env.CODEX_USAGE_REFRESH_INTERVAL_MS);
     return {
         provider: process.env.CODEX_USAGE_PROVIDER?.trim() || DEFAULT_PROVIDER,
         url: process.env.CODEX_USAGE_URL?.trim() || DEFAULT_URL,
         timeoutMs: parseTimeout(process.env.CODEX_USAGE_TIMEOUT_MS),
-        refreshIntervalMs: parseRefreshInterval(process.env.CODEX_USAGE_REFRESH_INTERVAL_MS),
+        refreshIntervalMs,
+        cacheTtlMs: parseCacheTtl(process.env.CODEX_USAGE_CACHE_TTL_MS, refreshIntervalMs),
     };
 }
 
@@ -417,6 +593,12 @@ function parseTimeout(value: string | undefined): number {
 function parseRefreshInterval(value: string | undefined): number {
     const parsed = Number.parseInt(value ?? "", 10);
     return Number.isFinite(parsed) && parsed >= 0 ? parsed : DEFAULT_REFRESH_INTERVAL_MS;
+}
+
+function parseCacheTtl(value: string | undefined, refreshIntervalMs: number): number {
+    const parsed = Number.parseInt(value ?? "", 10);
+    if (Number.isFinite(parsed) && parsed >= 0) return parsed;
+    return refreshIntervalMs > 0 ? refreshIntervalMs : DEFAULT_CACHE_TTL_MS;
 }
 
 function toFiniteNumber(value: unknown): number | undefined {
@@ -470,4 +652,8 @@ function capitalize(value: string): string {
 function truncate(value: string, maxLength: number): string {
     const compact = value.replace(/\s+/g, " ").trim();
     return compact.length > maxLength ? `${compact.slice(0, maxLength)}…` : compact;
+}
+
+function sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
 }

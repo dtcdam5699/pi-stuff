@@ -2,22 +2,15 @@ import os from "node:os";
 import { CustomEditor, type ExtensionAPI, type ExtensionCommandContext } from "@mariozechner/pi-coding-agent";
 import { matchesKey } from "@mariozechner/pi-tui";
 
-const COMMAND = "codex-usage";
-const WIDGET_KEY = "codex-usage";
-const STATUS_KEY = "codex-usage";
+const KEY = "codex-usage";
 const DEFAULT_PROVIDER = "openai-codex";
 const DEFAULT_TIMEOUT_MS = 15_000;
 const DEFAULT_URL = "https://chatgpt.com/backend-api/wham/usage";
 const JWT_CLAIM_PATH = "https://api.openai.com/auth";
 
-type UsageConfig = {
+type Config = {
     provider: string;
     url: string;
-    method: string;
-    headers: Record<string, string>;
-    authHeader?: string;
-    authPrefix?: string;
-    body?: string;
     timeoutMs: number;
 };
 
@@ -42,10 +35,37 @@ type UsageSnapshot = {
         unlimited?: boolean;
         balance?: string;
     };
-    updatedAt: string;
+    updatedAt: Date;
 };
 
-type UsageRuntimeContext = Pick<ExtensionCommandContext, "ui" | "modelRegistry">;
+type WhamWindowRaw = {
+    used_percent?: unknown;
+    reset_after_seconds?: unknown;
+};
+
+type WhamAdditionalRaw = {
+    metered_feature?: string;
+    limit_name?: string;
+    rate_limit?: {
+        primary_window?: WhamWindowRaw;
+    };
+};
+
+type WhamRaw = {
+    plan_type?: string;
+    rate_limit?: {
+        primary_window?: WhamWindowRaw;
+        secondary_window?: WhamWindowRaw;
+    };
+    additional_rate_limits?: WhamAdditionalRaw[];
+    credits?: {
+        has_credits?: boolean;
+        unlimited?: boolean;
+        balance?: string;
+    };
+};
+
+type RuntimeContext = Pick<ExtensionCommandContext, "ui" | "modelRegistry">;
 
 class CodexUsageEditor extends CustomEditor {
     private readonly isUsageActive: () => boolean;
@@ -74,20 +94,21 @@ class CodexUsageEditor extends CustomEditor {
 
 export default function (pi: ExtensionAPI) {
     let isUsageActive = false;
+    const config = readConfig();
 
     const closeUsageWidget = (ctx: Pick<ExtensionCommandContext, "ui">) => {
-        ctx.ui.setWidget(WIDGET_KEY, undefined);
+        ctx.ui.setWidget(KEY, undefined);
         isUsageActive = false;
     };
 
     const clearUsage = (ctx: Pick<ExtensionCommandContext, "ui">) => {
         closeUsageWidget(ctx);
-        ctx.ui.setStatus(STATUS_KEY, undefined);
+        ctx.ui.setStatus(KEY, undefined);
     };
 
     const showUsageError = (ctx: Pick<ExtensionCommandContext, "ui">, message: string, showWidget = false) => {
         if (showWidget) {
-            ctx.ui.setWidget(WIDGET_KEY, [
+            ctx.ui.setWidget(KEY, [
                 "Codex usage unavailable",
                 "",
                 message,
@@ -96,23 +117,23 @@ export default function (pi: ExtensionAPI) {
             ]);
             isUsageActive = true;
         }
-        ctx.ui.setStatus(STATUS_KEY, "Codex usage unavailable");
+        ctx.ui.setStatus(KEY, "Codex usage unavailable");
     };
 
-    const refreshUsage = async (ctx: UsageRuntimeContext, options?: { showWidget?: boolean; showLoading?: boolean }) => {
+    const refreshUsage = async (ctx: RuntimeContext, options?: { showWidget?: boolean; showLoading?: boolean }) => {
         if (options?.showLoading) {
-            ctx.ui.setStatus(STATUS_KEY, "Codex usage loading…");
+            ctx.ui.setStatus(KEY, "Codex usage loading...");
         }
 
         try {
-            const snapshot = await fetchUsage(readConfig(), ctx);
+            const snapshot = await fetchUsage(config, ctx);
             if (options?.showWidget || isUsageActive) {
                 renderUsage(snapshot, ctx);
                 if (options?.showWidget) {
                     isUsageActive = true;
                 }
             } else {
-                ctx.ui.setStatus(STATUS_KEY, buildStatusText(snapshot));
+                ctx.ui.setStatus(KEY, buildStatusText(snapshot));
             }
         } catch (error) {
             const message = error instanceof Error ? error.message : String(error);
@@ -120,7 +141,7 @@ export default function (pi: ExtensionAPI) {
         }
     };
 
-    pi.registerCommand(COMMAND, {
+    pi.registerCommand(KEY, {
         description: "Show current Codex plan usage",
         handler: async (args, ctx) => {
             const command = args.trim().toLowerCase();
@@ -131,7 +152,7 @@ export default function (pi: ExtensionAPI) {
             }
 
             if (command === "help") {
-                showHelp(ctx);
+                showHelp(config, ctx);
                 isUsageActive = true;
                 return;
             }
@@ -159,9 +180,8 @@ export default function (pi: ExtensionAPI) {
     });
 }
 
-function showHelp(ctx: ExtensionCommandContext) {
-    const config = readConfig();
-    ctx.ui.setWidget(WIDGET_KEY, [
+function showHelp(config: Config, ctx: Pick<ExtensionCommandContext, "ui">) {
+    ctx.ui.setWidget(KEY, [
         "/codex-usage",
         "",
         "Commands:",
@@ -175,47 +195,34 @@ function showHelp(ctx: ExtensionCommandContext) {
         "Environment overrides:",
         `  CODEX_USAGE_URL=${config.url}`,
         `  CODEX_USAGE_PROVIDER=${config.provider}`,
-        `  CODEX_USAGE_METHOD=${config.method}`,
-        "  CODEX_USAGE_HEADERS=<optional JSON object>",
-        "  CODEX_USAGE_AUTH_HEADER=Authorization",
-        "  CODEX_USAGE_AUTH_PREFIX=Bearer",
-        "  CODEX_USAGE_BODY=<optional request body>",
+        `  CODEX_USAGE_TIMEOUT_MS=${config.timeoutMs}`,
         "",
-        "Custom endpoints must return ChatGPT WHAM-style usage JSON.",
+        "Endpoint must return ChatGPT WHAM-style usage JSON.",
         "",
         "The built-in default adds chatgpt-account-id, originator=pi, and a pi-style User-Agent.",
     ]);
 }
 
-async function fetchUsage(config: UsageConfig, ctx: UsageRuntimeContext): Promise<UsageSnapshot> {
+async function fetchUsage(config: Config, ctx: RuntimeContext): Promise<UsageSnapshot> {
     const token = await ctx.modelRegistry.getApiKeyForProvider(config.provider);
     if (!token) {
-        throw new Error(`No auth for provider \"${config.provider}\". Run /login and choose ChatGPT Plus/Pro (Codex).`);
+        throw new Error(`No auth for provider "${config.provider}". Run /login and choose ChatGPT Plus/Pro (Codex).`);
     }
 
     const headers: Record<string, string> = {
         Accept: "application/json",
-        ...config.headers,
+        Authorization: `Bearer ${token}`,
     };
 
-    if (config.authHeader) {
-        headers[config.authHeader] = config.authPrefix ? `${config.authPrefix} ${token}`.trim() : token;
-    }
-
     applyChatGPTHeaders(config, token, headers);
-
-    if (config.body && !headers["Content-Type"]) {
-        headers["Content-Type"] = "application/json";
-    }
 
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), config.timeoutMs);
 
     try {
         const response = await fetch(config.url, {
-            method: config.method,
+            method: "GET",
             headers,
-            body: allowsBody(config.method) ? config.body : undefined,
             signal: controller.signal,
         });
 
@@ -246,68 +253,67 @@ async function fetchUsage(config: UsageConfig, ctx: UsageRuntimeContext): Promis
     }
 }
 
-function applyChatGPTHeaders(config: UsageConfig, token: string, headers: Record<string, string>) {
+function applyChatGPTHeaders(config: Config, token: string, headers: Record<string, string>) {
     if (!isChatGPTBackendUrl(config.url)) return;
 
     const accountId = extractAccountId(token);
-    if (accountId && !headers["chatgpt-account-id"]) {
+    if (accountId) {
         headers["chatgpt-account-id"] = accountId;
     }
-    if (!headers.originator) {
-        headers.originator = "pi";
-    }
-    if (!headers["User-Agent"]) {
-        headers["User-Agent"] = `pi (${os.platform()} ${os.release()}; ${os.arch()})`;
-    }
+    headers.originator = "pi";
+    headers["User-Agent"] = `pi (${os.platform()} ${os.release()}; ${os.arch()})`;
 }
 
-function looksLikeWhamUsage(raw: unknown): boolean {
+function looksLikeWhamUsage(raw: unknown): raw is WhamRaw {
+    if (!raw || typeof raw !== "object") return false;
+    const obj = raw as WhamRaw;
     return Boolean(
-        pickString(raw, ["plan_type"]) ||
-        pickNumber(raw, ["rate_limit.primary_window.used_percent", "rate_limit.secondary_window.used_percent"]),
+        obj.plan_type ||
+        toFiniteNumber(obj.rate_limit?.primary_window?.used_percent) !== undefined ||
+        toFiniteNumber(obj.rate_limit?.secondary_window?.used_percent) !== undefined,
     );
 }
 
-function normalizeWhamSnapshot(raw: unknown): UsageSnapshot {
-    const additional = getPath(raw, "additional_rate_limits");
-    const additionalLimits = Array.isArray(additional)
-        ? additional.map((entry) => normalizeAdditionalRateLimit(entry)).filter(Boolean)
+function normalizeWhamSnapshot(raw: WhamRaw): UsageSnapshot {
+    const additional = raw.additional_rate_limits;
+    const additionalLimits = additional
+        ? additional.map(normalizeAdditionalRateLimit).filter((v): v is AdditionalRateLimit => v !== null)
         : [];
 
+    const credits = raw.credits;
+    const hasAnyCredit = credits?.has_credits !== undefined || credits?.unlimited !== undefined || credits?.balance !== undefined;
+
     return {
-        plan: pickString(raw, ["plan_type"]),
-        primary: normalizeRateWindow(getPath(raw, "rate_limit.primary_window")),
-        secondary: normalizeRateWindow(getPath(raw, "rate_limit.secondary_window")),
-        additional: additionalLimits,
-        credits: {
-            hasCredits: pickBoolean(raw, ["credits.has_credits"]),
-            unlimited: pickBoolean(raw, ["credits.unlimited"]),
-            balance: pickString(raw, ["credits.balance"]),
-        },
-        updatedAt: new Date().toISOString(),
+        plan: raw.plan_type,
+        primary: normalizeRateWindow(raw.rate_limit?.primary_window),
+        secondary: normalizeRateWindow(raw.rate_limit?.secondary_window),
+        additional: additionalLimits.length > 0 ? additionalLimits : undefined,
+        credits: hasAnyCredit ? { hasCredits: credits.has_credits, unlimited: credits.unlimited, balance: credits.balance } : undefined,
+        updatedAt: new Date(),
     };
 }
 
-function normalizeAdditionalRateLimit(entry: unknown): AdditionalRateLimit | null {
-    const primary = normalizeRateWindow(getPath(entry, "rate_limit.primary_window"));
-    const limitId = pickString(entry, ["metered_feature"]);
-    const limitName = pickString(entry, ["limit_name"]);
+function normalizeAdditionalRateLimit(entry: WhamAdditionalRaw): AdditionalRateLimit | null {
+    const primary = normalizeRateWindow(entry.rate_limit?.primary_window);
+    const limitId = entry.metered_feature;
+    const limitName = entry.limit_name;
     if (!primary && !limitId && !limitName) return null;
     return { limitId, limitName, primary };
 }
 
-function normalizeRateWindow(raw: unknown): RateWindow | undefined {
-    const usedPercent = pickNumber(raw, ["used_percent"]);
-    if (typeof usedPercent !== "number") return undefined;
+function normalizeRateWindow(raw: WhamWindowRaw | undefined): RateWindow | undefined {
+    if (!raw) return undefined;
+    const usedPercent = toFiniteNumber(raw.used_percent);
+    if (usedPercent === undefined) return undefined;
     return {
         usedPercent,
-        resetAfterSeconds: pickNumber(raw, ["reset_after_seconds"]),
+        resetAfterSeconds: toFiniteNumber(raw.reset_after_seconds),
     };
 }
 
 function renderUsage(snapshot: UsageSnapshot, ctx: Pick<ExtensionCommandContext, "ui">) {
-    ctx.ui.setWidget(WIDGET_KEY, buildWhamWidgetLines(snapshot));
-    ctx.ui.setStatus(STATUS_KEY, buildStatusText(snapshot));
+    ctx.ui.setWidget(KEY, buildWhamWidgetLines(snapshot));
+    ctx.ui.setStatus(KEY, buildStatusText(snapshot));
 }
 
 function buildWhamWidgetLines(snapshot: UsageSnapshot): string[] {
@@ -344,7 +350,7 @@ function buildWhamWidgetLines(snapshot: UsageSnapshot): string[] {
         }
     }
 
-    lines.push(`Updated: ${formatDate(snapshot.updatedAt)}`);
+    lines.push(`Updated: ${snapshot.updatedAt.toLocaleString()}`);
     return lines;
 }
 
@@ -356,7 +362,7 @@ function buildStatusText(snapshot: UsageSnapshot): string {
     const reset = snapshot.primary.resetAfterSeconds
         ? ` | resets in ${formatRelativeSeconds(snapshot.primary.resetAfterSeconds)}`
         : "";
-    return `Codex ${Math.round(100 - snapshot.primary.usedPercent)}% left${reset}`;
+    return `Codex Weekly Limit: ${Math.round(100 - snapshot.primary.usedPercent)}% left${reset}`;
 }
 
 function formatWindow(window: RateWindow): string {
@@ -365,31 +371,12 @@ function formatWindow(window: RateWindow): string {
     return `${pct} left${reset}`;
 }
 
-function readConfig(): UsageConfig {
+function readConfig(): Config {
     return {
         provider: process.env.CODEX_USAGE_PROVIDER?.trim() || DEFAULT_PROVIDER,
         url: process.env.CODEX_USAGE_URL?.trim() || DEFAULT_URL,
-        method: process.env.CODEX_USAGE_METHOD?.trim().toUpperCase() || "GET",
-        headers: parseHeaders(process.env.CODEX_USAGE_HEADERS),
-        authHeader: process.env.CODEX_USAGE_AUTH_HEADER?.trim() || "Authorization",
-        authPrefix: process.env.CODEX_USAGE_AUTH_PREFIX?.trim() || "Bearer",
-        body: process.env.CODEX_USAGE_BODY,
         timeoutMs: parseTimeout(process.env.CODEX_USAGE_TIMEOUT_MS),
     };
-}
-
-function parseHeaders(value: string | undefined): Record<string, string> {
-    if (!value?.trim()) return {};
-    try {
-        const parsed = JSON.parse(value) as Record<string, unknown>;
-        return Object.fromEntries(
-            Object.entries(parsed)
-                .filter((entry): entry is [string, string] => typeof entry[1] === "string")
-                .map(([key, headerValue]) => [key, headerValue]),
-        );
-    } catch {
-        throw new Error('CODEX_USAGE_HEADERS must be valid JSON, e.g. {"x-foo":"bar"}');
-    }
 }
 
 function parseTimeout(value: string | undefined): number {
@@ -397,51 +384,20 @@ function parseTimeout(value: string | undefined): number {
     return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_TIMEOUT_MS;
 }
 
-function allowsBody(method: string): boolean {
-    return !["GET", "HEAD"].includes(method.toUpperCase());
-}
-
-function pickNumber(input: unknown, paths: string[]): number | undefined {
-    for (const path of paths) {
-        const value = getPath(input, path);
-        if (typeof value === "number" && Number.isFinite(value)) return value;
-        if (typeof value === "string" && value.trim()) {
-            const parsed = Number(value.trim());
-            if (Number.isFinite(parsed)) return parsed;
-        }
+function toFiniteNumber(value: unknown): number | undefined {
+    if (typeof value === "number" && Number.isFinite(value)) return value;
+    if (typeof value === "string" && value.trim()) {
+        const parsed = Number(value.trim());
+        if (Number.isFinite(parsed)) return parsed;
     }
     return undefined;
-}
-
-function pickString(input: unknown, paths: string[]): string | undefined {
-    for (const path of paths) {
-        const value = getPath(input, path);
-        if (typeof value === "string" && value.trim()) return value.trim();
-    }
-    return undefined;
-}
-
-function pickBoolean(input: unknown, paths: string[]): boolean | undefined {
-    for (const path of paths) {
-        const value = getPath(input, path);
-        if (typeof value === "boolean") return value;
-    }
-    return undefined;
-}
-
-function getPath(input: unknown, path: string): unknown {
-    const parts = path.split(".");
-    let current: unknown = input;
-    for (const part of parts) {
-        if (!current || typeof current !== "object" || !(part in current)) return undefined;
-        current = (current as Record<string, unknown>)[part];
-    }
-    return current;
 }
 
 function extractAccountId(token: string): string | undefined {
     try {
-        const payload = JSON.parse(Buffer.from(token.split(".")[1] ?? "", "base64url").toString("utf8")) as Record<string, unknown>;
+        const segment = token.split(".")[1];
+        if (!segment) return undefined;
+        const payload = JSON.parse(Buffer.from(segment, "base64url").toString("utf8")) as Record<string, unknown>;
         const auth = payload[JWT_CLAIM_PATH] as Record<string, unknown> | undefined;
         const accountId = auth?.chatgpt_account_id;
         return typeof accountId === "string" && accountId.length > 0 ? accountId : undefined;
@@ -457,12 +413,6 @@ function isChatGPTBackendUrl(url: string): boolean {
     } catch {
         return false;
     }
-}
-
-function formatDate(value: string): string {
-    const timestamp = Date.parse(value);
-    if (!Number.isFinite(timestamp)) return value;
-    return new Date(timestamp).toLocaleString();
 }
 
 function formatRelativeSeconds(seconds: number): string {

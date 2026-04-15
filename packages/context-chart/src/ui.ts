@@ -413,6 +413,33 @@ export function renderHtml(initialPayload: ChartPayload): string {
 		};
 
 		window.updateChart(${JSON.stringify(initialPayload)});
+
+		// Cmd+/- zoom support
+		(function() {
+			let zoomLevel = 1;
+			const STEP = 0.1;
+			const MIN = 0.5;
+			const MAX = 3;
+			document.addEventListener('keydown', (e) => {
+				if (!(e.metaKey || e.ctrlKey)) return;
+				if (e.key === '=' || e.key === '+') {
+					e.preventDefault();
+					zoomLevel = Math.min(MAX, zoomLevel + STEP);
+					document.body.style.zoom = zoomLevel;
+					if (chart) chart.resize();
+				} else if (e.key === '-') {
+					e.preventDefault();
+					zoomLevel = Math.max(MIN, zoomLevel - STEP);
+					document.body.style.zoom = zoomLevel;
+					if (chart) chart.resize();
+				} else if (e.key === '0') {
+					e.preventDefault();
+					zoomLevel = 1;
+					document.body.style.zoom = zoomLevel;
+					if (chart) chart.resize();
+				}
+			});
+		})();
 	</script>
 </body>
 </html>`;

@@ -4,6 +4,7 @@ import { isToolCallEventType } from "@mariozechner/pi-coding-agent";
 const KEY = "rtk-rewrite";
 const DEFAULT_TIMEOUT_MS = 2000;
 const MAX_CACHE_ENTRIES = 200;
+const LC_ALL_PREFIX = "export LC_ALL=C";
 
 type Config = {
 	enabledByDefault: boolean;
@@ -133,7 +134,7 @@ export default function rtkRewriteExtension(pi: ExtensionAPI) {
 		const rewritten = await getRewrite(original, ctx);
 		if (!rewritten || rewritten === original) return;
 
-		event.input.command = rewritten;
+		event.input.command = withLcAll(rewritten);
 		if (config.verbose && ctx.hasUI) {
 			ctx.ui.notify(`RTK rewrite: ${original} → ${rewritten}`, "info");
 		}
@@ -194,6 +195,11 @@ export default function rtkRewriteExtension(pi: ExtensionAPI) {
 		}
 		ctx.ui.setStatus(KEY, buildStatusLine(sessionEnabled, rtkAvailable));
 	}
+}
+
+function withLcAll(command: string): string {
+	if (command.includes("LC_ALL=")) return command;
+	return `${LC_ALL_PREFIX}\n${command}`;
 }
 
 function buildStatusMessage(config: Config, sessionEnabled: boolean, rtkAvailable: boolean | null): string {

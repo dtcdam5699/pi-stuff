@@ -9,6 +9,12 @@ import {
 
 const EXTENSION_SNAPSHOT_VERSION = 1;
 
+export type ToolDetail = {
+	name: string;
+	result: string;
+	isError: boolean;
+};
+
 export type Snapshot = {
 	version: number;
 	turn: number;
@@ -22,6 +28,7 @@ export type Snapshot = {
 	turnLabel?: string;
 	summary?: string;
 	timestamp?: number;
+	toolDetails?: ToolDetail[];
 };
 
 export type UsageSummary = {
@@ -55,19 +62,22 @@ export function buildRecordedSnapshots(ctx: ExtensionContext): Snapshot[] {
 	let turn = 0;
 	let lastUserText = "";
 
-	for (const entry of branch) {
+	for (let i = 0; i < branch.length; i++) {
+		const entry = branch[i];
 		if (entry.type === "message" && entry.message.role === "user") {
 			lastUserText = extractFirstText(entry.message);
 		}
 		if (entry.type !== "message" || entry.message.role !== "assistant") continue;
 		turn += 1;
 		const toolNames = extractToolNames(entry.message);
+		const toolDetails = extractToolDetails(branch, i);
 		const context = buildSessionContext(entries, entry.parentId ?? null, byId);
 		snapshots.push({
 			...buildSnapshot(context.messages, systemPrompt, turn, "recorded"),
 			turnLabel: toolNames.length > 0 ? (toolNames.length === 1 ? "Tool call" : "Tool calls") : "User message",
 			summary: buildTurnSummary(lastUserText, toolNames),
 			timestamp: safeTimestamp(entry.timestamp),
+			toolDetails: toolDetails.length > 0 ? toolDetails : undefined,
 		});
 		lastUserText = "";
 	}
@@ -265,6 +275,29 @@ function extractToolNames(message: AgentMessage): string[] {
 		}
 	}
 	return names;
+}
+
+function extractToolDetails(branch: SessionEntry[], assistantIndex: number): ToolDetail[] {
+	const details: ToolDetail[] = [];
+	for (let j = assistantIndex + 1; j < branch.length; j++) {
+		const entry = branch[j];
+		if (entry.type !== "message") continue;
+		const msg = entry.message as any;
+		if (msg.role === "toolResult") {
+			const text = Array.isArray(msg.content)
+				? msg.content
+					.filter((b: any) => b.type === "text")
+					.map((b: any) => b.text ?? "")
+					.join("\n")
+				: "";
+			details.push({ name: msg.toolName ?? "unknown", result: text, isError: !!msg.isError });
+		} else if (msg.role === "bashExecution") {
+			details.push({ name: msg.command ?? "bash", result: msg.output ?? "", isError: (msg.exitCode ?? 0) !== 0 });
+		} else if (msg.role === "user" || msg.role === "assistant") {
+			break;
+		}
+	}
+	return details;
 }
 
 function buildTurnSummary(userText: string, toolNames: string[]): string {

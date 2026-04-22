@@ -158,6 +158,73 @@ export function renderHtml(initialPayload: ChartPayload): string {
 			background: var(--accent);
 			color: #fff;
 		}
+		.detail-panel {
+			display: none;
+			max-height: 240px;
+			overflow-y: auto;
+			border: 1px solid var(--border);
+			background: var(--panel);
+			padding: 12px 14px;
+		}
+		.detail-panel.visible { display: block; }
+		.detail-header {
+			display: flex;
+			justify-content: space-between;
+			align-items: center;
+			margin-bottom: 8px;
+		}
+		.detail-header span {
+			font-family: ${MONO_FONT};
+			font-size: 12px;
+			font-weight: 600;
+		}
+		.detail-close {
+			all: unset;
+			cursor: pointer;
+			font-family: ${MONO_FONT};
+			font-size: 11px;
+			color: var(--muted);
+			padding: 2px 6px;
+			border: 1px solid var(--border);
+		}
+		.detail-close:hover { color: var(--text); }
+		.tool-entry {
+			margin-bottom: 8px;
+			border: 1px solid var(--border);
+		}
+		.tool-entry-header {
+			display: flex;
+			align-items: center;
+			gap: 6px;
+			padding: 6px 10px;
+			cursor: pointer;
+			font-family: ${MONO_FONT};
+			font-size: 11px;
+			font-weight: 500;
+			background: var(--bg);
+		}
+		.tool-entry-header:hover { opacity: 0.8; }
+		.tool-entry-header .arrow { font-size: 9px; color: var(--muted); }
+		.tool-entry-header .error-badge {
+			font-size: 9px;
+			color: #e45;
+			font-weight: 600;
+			text-transform: uppercase;
+		}
+		.tool-result {
+			display: none;
+			padding: 8px 10px;
+			font-family: ${MONO_FONT};
+			font-size: 11px;
+			line-height: 1.5;
+			white-space: pre-wrap;
+			word-break: break-all;
+			max-height: 160px;
+			overflow-y: auto;
+			color: var(--muted);
+			border-top: 1px solid var(--border);
+		}
+		.tool-result.open { display: block; }
 		.footer {
 			display: flex;
 			justify-content: space-between;
@@ -214,6 +281,13 @@ export function renderHtml(initialPayload: ChartPayload): string {
 				<canvas id="chart"></canvas>
 				<div class="empty" id="emptyState">Open this window before or during a conversation to watch context accumulate turn by turn.</div>
 			</div>
+		</div>
+		<div class="detail-panel" id="detailPanel">
+			<div class="detail-header">
+				<span id="detailTitle">Turn details</span>
+				<button class="detail-close" onclick="closeDetail()">✕ Close</button>
+			</div>
+			<div id="detailBody"></div>
 		</div>
 		<div class="footer">
 			<span id="sessionFile">No session file</span>
@@ -290,6 +364,11 @@ export function renderHtml(initialPayload: ChartPayload): string {
 					maintainAspectRatio: false,
 					layout: { padding: { bottom: 16 } },
 					interaction: { mode: 'index', intersect: false },
+					onClick(event, elements) {
+						if (!elements.length || !currentPayload) return;
+						const index = elements[0].index;
+						showDetail(index);
+					},
 					plugins: {
 						legend: {
 							position: 'top',
@@ -410,6 +489,46 @@ export function renderHtml(initialPayload: ChartPayload): string {
 			instance.data.labels = payload.points.map((point) => String(point.turn));
 			instance.data.datasets = buildDatasets(payload.points);
 			instance.update();
+		};
+
+		function escapeHtml(str) {
+			return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+		}
+
+		function showDetail(index) {
+			const point = currentPayload?.points[index];
+			if (!point) return;
+			const panel = document.getElementById('detailPanel');
+			const title = document.getElementById('detailTitle');
+			const body = document.getElementById('detailBody');
+			title.textContent = 'Turn ' + point.turn + (point.summary ? ' — ' + point.summary : '');
+			const details = point.toolDetails || [];
+			if (details.length === 0) {
+				body.innerHTML = '<div style="color:var(--muted);font-family:monospace;font-size:11px;">No tool calls in this turn.</div>';
+			} else {
+				body.innerHTML = details.map((tool, i) =>
+					'<div class="tool-entry">' +
+						'<div class="tool-entry-header" onclick="toggleToolResult(' + i + ')">' +
+							'<span class="arrow" id="arrow-' + i + '">▶</span> ' +
+							escapeHtml(tool.name) +
+							(tool.isError ? ' <span class="error-badge">error</span>' : '') +
+						'</div>' +
+						'<div class="tool-result" id="tool-result-' + i + '">' + escapeHtml(tool.result || '(empty)') + '</div>' +
+					'</div>'
+				).join('');
+			}
+			panel.classList.add('visible');
+		}
+
+		window.closeDetail = function closeDetail() {
+			document.getElementById('detailPanel').classList.remove('visible');
+		};
+
+		window.toggleToolResult = function toggleToolResult(index) {
+			const el = document.getElementById('tool-result-' + index);
+			const arrow = document.getElementById('arrow-' + index);
+			const open = el.classList.toggle('open');
+			arrow.textContent = open ? '▼' : '▶';
 		};
 
 		window.updateChart(${JSON.stringify(initialPayload)});

